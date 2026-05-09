@@ -1,4 +1,3 @@
-const CLAUDE_API_KEY = "YOUR_CLAUDE_API_KEY_HERE"; // 🔑 Replace this
 
 const explainBtn = document.getElementById("explainBtn");
 const clearBtn = document.getElementById("clearBtn");
