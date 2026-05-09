@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "DevTools AI Explainer",
+  "description": "Select any element in DevTools and get an AI explanation instantly.",
+  "version": "1.0.0",
+  "devtools_page": "devtools.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Code Explainer"
+  },
+  "host_permissions": ["<all_urls>"]
+}
