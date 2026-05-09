@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>AI Explainer</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">AI Explainer</span>
+      </div>
+      <div class="badge">DevTools</div>
+    </div>
+
+    <div class="instructions">
+      <p>Click an element in the <strong>Elements</strong> tab, then press <strong>Explain</strong>.</p>
+    </div>
+
+    <div class="controls">
+      <button id="explainBtn" class="btn-primary">
+        <span class="btn-icon">🔍</span> Explain Selected Element
+      </button>
+      <button id="clearBtn" class="btn-secondary">Clear</button>
+    </div>
+
+    <div class="mode-selector">
+      <label>Explanation Mode:</label>
+      <select id="modeSelect">
+        <option value="general">General Overview</option>
+        <option value="beginner">Beginner Friendly</option>
+        <option value="security">Security Analysis</option>
+        <option value="css">CSS Breakdown</option>
+        <option value="performance">Performance Tips</option>
+      </select>
+    </div>
+
+    <div class="code-preview" id="codePreview">
+      <div class="code-preview-label">Selected Element</div>
+      <pre id="codeContent"><span class="placeholder">No element selected yet. Click an element in the Elements tab.</span></pre>
+    </div>
+
+    <div class="result-box" id="resultBox">
+      <div class="result-label">AI Explanation</div>
+      <div class="result-content" id="resultContent">
+        <span class="placeholder">Your explanation will appear here.</span>
+      </div>
+    </div>
+
+    <div class="footer">
+      Powered by Claude AI
+    </div>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>
