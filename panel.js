@@ -1,62 +1,65 @@
-const CLAUDE_API_KEY = "YOUR_CLAUDE_API_KEY_HERE"; // 🔑 Replace this
-
 const explainBtn = document.getElementById("explainBtn");
 const clearBtn = document.getElementById("clearBtn");
 const codeContent = document.getElementById("codeContent");
 const resultContent = document.getElementById("resultContent");
 const modeSelect = document.getElementById("modeSelect");
 
-// Mode prompts
 const MODE_PROMPTS = {
   general: "Explain what this HTML element does, its purpose, its CSS classes, and how it fits into the page. Be clear and structured.",
   beginner: "Explain this HTML/CSS code to a complete beginner learning web development. Use simple language, analogies, and explain every part.",
-  security: "Analyze this HTML element for potential security issues. Look for: XSS vulnerabilities, exposed data, dangerous attributes (onclick, eval, innerHTML usage), inline scripts, suspicious links, data- attributes leaking info. Be specific.",
-  css: "Focus on the CSS classes and inline styles on this element. Explain what each style rule does visually and why a developer might use it.",
-  performance: "Analyze this HTML element for web performance. Check for: large images without lazy loading, render-blocking scripts, inefficient layout triggers, missing attributes that affect performance."
+  security: "Analyze this HTML element for security issues: XSS vulnerabilities, exposed data, dangerous attributes, inline scripts, suspicious links. Be specific.",
+  css: "Focus on the CSS classes and inline styles. Explain what each style rule does visually and why a developer might use it.",
+  performance: "Analyze this element for web performance: large images, render-blocking scripts, missing lazy loading, inefficient layout triggers."
 };
 
-// Get the selected element from DevTools ($0)
+// Load API key from storage
+function getApiKey() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(["geminiApiKey"], (result) => {
+      if (result.geminiApiKey) {
+        resolve(result.geminiApiKey);
+      } else {
+        reject(new Error("No API key found. Please go to extension Settings and add your Gemini API key."));
+      }
+    });
+  });
+}
+
+// Get selected element via $0
 function getSelectedElement() {
   return new Promise((resolve, reject) => {
     chrome.devtools.inspectedWindow.eval(
       `(function() {
         if (!$0) return null;
+        const style = window.getComputedStyle($0);
+        const keys = ['display','position','width','height','color','background',
+                      'font-size','margin','padding','flex','grid','z-index','overflow'];
+        const computedStyle = {};
+        keys.forEach(k => computedStyle[k] = style.getPropertyValue(k));
         return {
           outerHTML: $0.outerHTML,
           tagName: $0.tagName,
           id: $0.id,
           className: $0.className,
-          computedStyle: (function() {
-            const style = window.getComputedStyle($0);
-            const keys = ['display','position','width','height','color','background',
-                          'font-size','margin','padding','flex','grid','z-index','overflow'];
-            const result = {};
-            keys.forEach(k => result[k] = style.getPropertyValue(k));
-            return result;
-          })()
+          computedStyle
         };
       })()`,
       (result, isException) => {
-        if (isException) {
-          reject(new Error("Could not access DevTools context"));
-        } else if (!result) {
-          reject(new Error("No element selected. Click an element in the Elements tab first."));
-        } else {
-          resolve(result);
-        }
+        if (isException) reject(new Error("Could not access DevTools context."));
+        else if (!result) reject(new Error("No element selected. Click an element in the Elements tab first."));
+        else resolve(result);
       }
     );
   });
 }
 
-// Call Claude API
-async function explainWithClaude(elementData, mode) {
+// Call Gemini API
+async function explainWithGemini(elementData, mode, apiKey) {
   const modePrompt = MODE_PROMPTS[mode] || MODE_PROMPTS.general;
-
-  const codeSnippet = elementData.outerHTML.slice(0, 3000); // limit size
+  const codeSnippet = elementData.outerHTML.slice(0, 3000);
   const styleInfo = JSON.stringify(elementData.computedStyle, null, 2);
 
-  const userMessage = `
+  const prompt = `
 ${modePrompt}
 
 **Selected HTML Element:**
@@ -72,58 +75,59 @@ ${styleInfo}
 Tag: ${elementData.tagName}, ID: "${elementData.id}", Classes: "${elementData.className}"
   `.trim();
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": CLAUDE_API_KEY,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      messages: [
-        { role: "user", content: userMessage }
-      ]
-    })
-  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.4 }
+      })
+    }
+  );
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(err?.error?.message || "API request failed");
+    const msg = err?.error?.message || "Gemini API request failed";
+    throw new Error(msg);
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || "No explanation returned.";
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No explanation returned.";
 }
 
 // Main explain handler
 explainBtn.addEventListener("click", async () => {
   explainBtn.disabled = true;
   explainBtn.textContent = "Analyzing...";
-
-  // Show loading in result
-  resultContent.innerHTML = `<div class="loading"><div class="spinner"></div> Fetching element and sending to Claude...</div>`;
+  resultContent.innerHTML = `<div class="loading"><div class="spinner"></div> Fetching element...</div>`;
   codeContent.innerHTML = `<span class="placeholder">Reading selected element...</span>`;
 
   try {
-    const elementData = await getSelectedElement();
+    const [apiKey, elementData] = await Promise.all([
+      getApiKey(),
+      getSelectedElement()
+    ]);
 
-    // Show code preview
     codeContent.textContent = elementData.outerHTML.slice(0, 800) +
       (elementData.outerHTML.length > 800 ? "\n... (truncated)" : "");
 
-    resultContent.innerHTML = `<div class="loading"><div class="spinner"></div> Claude is thinking...</div>`;
+    resultContent.innerHTML = `<div class="loading"><div class="spinner"></div> Gemini is thinking...</div>`;
 
     const mode = modeSelect.value;
-    const explanation = await explainWithClaude(elementData, mode);
-
+    const explanation = await explainWithGemini(elementData, mode, apiKey);
     resultContent.textContent = explanation;
 
   } catch (err) {
     resultContent.innerHTML = `<div class="error-msg">❌ ${err.message}</div>`;
-    if (err.message.includes("No element")) {
-      codeContent.innerHTML = `<span class="placeholder">No element selected yet. Click an element in the Elements tab.</span>`;
+
+    // Guide them to settings if key is missing
+    if (err.message.includes("No API key")) {
+      resultContent.innerHTML += `
+        <br><div style="font-size:11px; color:#6060a0; margin-top:8px;">
+          Right-click the extension icon → <strong>Options</strong> to add your key.
+        </div>`;
     }
   } finally {
     explainBtn.disabled = false;
@@ -131,8 +135,7 @@ explainBtn.addEventListener("click", async () => {
   }
 });
 
-// Clear handler
 clearBtn.addEventListener("click", () => {
-  codeContent.innerHTML = `<span class="placeholder">No element selected yet. Click an element in the Elements tab.</span>`;
+  codeContent.innerHTML = `<span class="placeholder">No element selected yet.</span>`;
   resultContent.innerHTML = `<span class="placeholder">Your explanation will appear here.</span>`;
 });
